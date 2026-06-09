@@ -1,0 +1,25 @@
+{
+  "name": "rera_haryana_cj",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "axios": "^1.17.0",
+    "cheerio": "^1.2.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "firebase-admin": "^13.10.0",
+    "install": "^0.13.0",
+    "node-cron": "^4.2.1",
+    "npm": "^11.16.0",
+    "uuid": "^14.0.0"
+  }
+}
