@@ -295,6 +295,50 @@ function getOrderRows(sections) {
   return rows.filter((r) => r["Order_action"] || (r["Order"] && r["Order"] !== "—"));
 }
 
+/**
+ * Detects new orders from complaint_listing_details and saves them to the orders subcollection.
+ * Uses dd/mm/yyyy formatted date (with slashes replaced by dashes for the doc ID to avoid nested paths).
+ */
+async function saveNewOrders(docRef, sections, caseData) {
+  const orderRows = getOrderRows(sections);
+  if (!orderRows || orderRows.length === 0) return 0;
+
+  const ordersCollection = docRef.collection("orders");
+  let newOrdersCount = 0;
+
+  for (const row of orderRows) {
+    const rawHearingDate = row["Date of Hearing"];
+    const hearingDate = normalizeHaryanaHearingDate(rawHearingDate);
+    if (!hearingDate || hearingDate === "N/A") continue;
+
+    // Use hearingDate with slashes replaced by dashes as the doc ID to prevent Firestore path splitting,
+    // while keeping the exact dd/mm/yyyy format inside the document fields.
+    const docId = hearingDate.replace(/\//g, "-");
+    const orderDocRef = ordersCollection.doc(docId);
+    const orderDoc = await orderDocRef.get();
+
+    if (!orderDoc.exists) {
+      const orderData = {
+        hearingDate, // "dd/mm/yyyy"
+        status: row["Status"] || "—",
+        proceedings: row["Proceedings of the day"] || "—",
+        bench: row["Bench"] || "—",
+        orderUrl: row["Order_action"]?.url || "—",
+        orderLabel: row["Order_action"]?.text || "—",
+        uploadedOn: row["Order Uploaded On"] || "—",
+        detectedAt: new Date(),
+        caseId: docRef.id,
+        caseNo: `${caseData.caseNo || caseData.complaintNo || ""}`,
+      };
+
+      await orderDocRef.set(orderData);
+      newOrdersCount++;
+    }
+  }
+
+  return newOrdersCount;
+}
+
 /* ============================================================
    FIRESTORE: Query Haryana Cases
    ============================================================ */
@@ -462,6 +506,16 @@ async function caseSyncCronJob() {
       await doc.ref.set(updatedFields, { merge: true });
       console.log(`[HR-CJ] Case ${caseId} updated in Firestore`);
 
+      // ── 5.5. Save new orders to orders subcollection ──────────
+      const targetDocRef = caseStatus === "disposed" 
+        ? db.collection("disposed").doc(caseId)
+        : doc.ref;
+
+      const newOrderCount = await saveNewOrders(targetDocRef, parsed.sections, data);
+      if (newOrderCount > 0) {
+        console.log(`[HR-CJ] ${newOrderCount} new order(s) saved for case ${caseId}`);
+      }
+
       // ── 6. Create notification if next hearing changed ────────
       if (shouldUpdateNext) {
         createNotification(data.owner, caseId, newNextHearing, data).catch(
@@ -505,4 +559,4 @@ cron.schedule("0 0 * * *", () => {
   );
 });
 
-module.exports = { caseSyncCronJob, fetchDetailPage, parseCaseDetailPage };
+module.exports = { caseSyncCronJob, fetchDetailPage, parseCaseDetailPage, saveNewOrders };

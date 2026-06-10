@@ -47,4 +47,32 @@ router.get("/scrape/:internalId", async (req, res) => {
   }
 });
 
+/**
+ * GET /api/rera/hr/cron/orders/:caseId
+ * Get all synced orders for a specific case from the pending or disposed collection.
+ */
+router.get("/orders/:caseId", async (req, res) => {
+  const { caseId } = req.params;
+  const db = require("../config/firebase");
+  try {
+    // Check pending first
+    let snap = await db.collection("pending").doc(caseId).collection("orders").get();
+    
+    // If empty, check disposed
+    if (snap.empty) {
+      snap = await db.collection("disposed").doc(caseId).collection("orders").get();
+    }
+
+    const orders = snap.docs.map((doc) => doc.data());
+    res.json({
+      success: true,
+      caseId,
+      count: orders.length,
+      orders,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
